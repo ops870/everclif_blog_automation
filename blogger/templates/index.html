@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EverClif — Blog Automation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #F5F6F7; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem; width: 100%; max-width: 600px; }
+  .logo { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #000080; margin-bottom: .4rem; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: .4rem; }
+  .sub { font-size: 14px; color: #6b6b6b; margin-bottom: 2rem; line-height: 1.6; }
+
+  .field { margin-bottom: 1.4rem; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: .4rem; color: #3d3d3d; }
+  .hint { font-size: 12px; color: #888; margin-bottom: .5rem; }
+
+  input[type="text"], input[type="url"] { width: 100%; padding: .55rem .85rem; border: 1px solid #ddd; border-radius: 7px; font-size: 14px; outline: none; transition: border .2s; }
+  input[type="text"]:focus, input[type="url"]:focus { border-color: #1E90FF; }
+
+  details.advanced { margin-bottom: 1.4rem; }
+  details.advanced summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #000080; margin-bottom: .8rem; }
+  details.advanced .field:last-child { margin-bottom: 0; }
+
+  .drop-zone { border: 2px dashed #c8d8ec; border-radius: 8px; padding: 1.4rem; text-align: center; cursor: pointer; transition: background .2s, border-color .2s; position: relative; }
+  .drop-zone:hover, .drop-zone.dragover { background: #eef4fd; border-color: #1E90FF; }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 28px; margin-bottom: .4rem; }
+  .drop-label { font-size: 14px; color: #555; }
+  .drop-label span { color: #1E90FF; font-weight: 600; }
+  .file-list { margin-top: .75rem; text-align: left; }
+  .file-item { font-size: 12px; color: #3d3d3d; padding: 4px 8px; background: #eef4fd; border-radius: 5px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .file-item .order { font-weight: 700; color: #000080; min-width: 20px; }
+
+  .errors { background: #fdf0eb; border: 1px solid #f5c4b3; border-radius: 7px; padding: .85rem 1rem; margin-bottom: 1.4rem; }
+  .errors li { font-size: 13px; color: #c0471f; padding: 2px 0; list-style: none; }
+  .errors li::before { content: '✕  '; }
+
+  button[type="submit"] { width: 100%; padding: .85rem; background: #000080; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s; }
+  button[type="submit"]:hover { background: #14207A; }
+  button[type="submit"]:disabled { background: #a0a0c8; cursor: not-allowed; }
+
+  .spinner { display: none; text-align: center; margin-top: 1rem; font-size: 13px; color: #6b6b6b; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">EverClif</div>
+  <h1>Blog Automation</h1>
+  <p class="sub">Upload any blog post HTML file. It will automatically be rebuilt into the EverClif blog template — same content, feature image pulled from the file, ready to paste into WordPress.</p>
+
+  {% if errors %}
+  <ul class="errors">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" id="mainForm">
+    {% csrf_token %}
+
+    <div class="field">
+      <label>HTML File <span style="color:#c0471f">*</span></label>
+      <div class="drop-zone" id="htmlDrop">
+        <input type="file" name="html_file" accept=".html" required id="htmlInput">
+        <div class="drop-icon">📄</div>
+        <div class="drop-label"><span>Choose HTML file</span> or drag & drop</div>
+      </div>
+      <div class="file-list" id="htmlFileList"></div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced options (optional)</summary>
+      <div class="field">
+        <label>CTA text</label>
+        <div class="hint">Leave blank to use the default set in views.py</div>
+        <input type="text" name="cta_text" placeholder="Want a strategy built around your audience and goals?">
+      </div>
+      <div class="field">
+        <label>CTA link</label>
+        <input type="url" name="cta_link" placeholder="https://calendly.com/anirban-everclif/30min">
+      </div>
+      <div class="field">
+        <label>CTA image URL</label>
+        <div class="hint">Founder/brand photo — upload it to the WordPress media library once and paste its URL here, or leave blank to use the default set in views.py</div>
+        <input type="url" name="cta_image" placeholder="https://everclif.com/insights/wp-content/uploads/.../founder.webp">
+      </div>
+    </details>
+
+    <button type="submit" id="submitBtn">Convert &amp; Download HTML</button>
+    <div class="spinner" id="spinner">Processing… please wait</div>
+  </form>
+</div>
+
+<script>
+  document.getElementById('htmlInput').addEventListener('change', function() {
+    const list = document.getElementById('htmlFileList');
+    list.innerHTML = '';
+    const file = this.files[0];
+    if (!file) return;
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.innerHTML = `<span class="order">✓</span> ${file.name}`;
+    list.appendChild(item);
+  });
+
+  document.getElementById('mainForm').addEventListener('submit', function() {
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('submitBtn').textContent = 'Processing…';
+    document.getElementById('spinner').style.display = 'block';
+  });
+
+  const dz = document.getElementById('htmlDrop');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', () => dz.classList.remove('dragover'));
+</script>
+</body>
+</html>
