@@ -620,7 +620,7 @@ def _format_today():
     return f"{d.day} {d.strftime('%B')} {d.year}"
 
 
-def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None, cta_link=None, cta_image=None):
+def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None, cta_link=None, cta_image=None, feature_image=None):
     soup = BeautifulSoup(source_html, 'html.parser')
 
     for tag in soup.find_all(['style', 'script']):
@@ -635,13 +635,14 @@ def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None
     if h1:
         h1.extract()
 
-    feature_image = _extract_feature_image(soup)
+    extracted_feature_image = _extract_feature_image(soup)
+    feature_image = (feature_image or extracted_feature_image or '').strip() or None
 
     root = soup.find('article') or soup.find('main') or soup.find('body') or soup
 
-    if feature_image:
+    if extracted_feature_image:
         first_img = root.find('img')
-        if first_img is not None and first_img.get('src') == feature_image:
+        if first_img is not None and first_img.get('src') == extracted_feature_image:
             first_img.extract()
 
     # Author/date/eyebrow live in the hero header, which sits outside `root`
@@ -785,6 +786,7 @@ def index(request):
     cta_text = request.POST.get('cta_text', '').strip()
     cta_link = request.POST.get('cta_link', '').strip()
     cta_image = request.POST.get('cta_image', '').strip()
+    feature_image = request.POST.get('feature_image', '').strip()
 
     source_html = html_file.read().decode('utf-8', errors='replace')
 
@@ -796,6 +798,7 @@ def index(request):
             cta_text=cta_text or None,
             cta_link=cta_link or None,
             cta_image=cta_image or None,
+            feature_image=feature_image or None,
         )
     except Exception as exc:
         return render(request, 'index.html', {'errors': [f'Could not convert this file: {exc}']})

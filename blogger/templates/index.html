@@ -48,7 +48,7 @@
 <div class="card">
   <div class="logo">EverClif</div>
   <h1>Blog Automation</h1>
-  <p class="sub">Upload any blog post HTML file. It will automatically be rebuilt into the EverClif blog template — same content, feature image pulled from the file, ready to paste into WordPress.</p>
+  <p class="sub">Upload any blog post HTML file. It will automatically be rebuilt into the EverClif blog template — same content, feature image from the URL you provide (or auto-detected from the file if left blank), ready to paste into WordPress.</p>
 
   {% if errors %}
   <ul class="errors">
@@ -67,6 +67,12 @@
         <div class="drop-label"><span>Choose HTML file</span> or drag & drop</div>
       </div>
       <div class="file-list" id="htmlFileList"></div>
+    </div>
+
+    <div class="field">
+      <label>Feature image URL</label>
+      <div class="hint">Paste the WordPress media URL for this post's featured image. Leave blank to try auto-detecting one from the uploaded file.</div>
+      <input type="url" name="feature_image" placeholder="https://everclif.com/insights/wp-content/uploads/.../hero.webp">
     </div>
 
     <details class="advanced">
