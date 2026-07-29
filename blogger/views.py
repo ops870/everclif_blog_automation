@@ -589,7 +589,7 @@ def _extract_faq(root):
 def _build_toc(root):
     used_ids = set(filter(None, (t.get('id') for t in root.find_all(True))))
     toc_items = []
-    for heading in root.find_all(['h2', 'h3']):
+    for heading in root.find_all(['h2']):
         text = heading.get_text(strip=True)
         if not text:
             continue
