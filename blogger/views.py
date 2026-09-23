@@ -18,6 +18,7 @@ DEFAULT_CTA_TEXT = (
     "I can help you plan and execute it."
 )
 DEFAULT_CTA_LINK = "https://calendly.com/anirban-everclif/30min"
+DEFAULT_CTA_BUTTON_TEXT = "Talk to Us"
 WORDS_PER_MINUTE = 200
 
 FAQ_HEADING_RE = re.compile(r'\bfaqs?\b|\bfrequently asked questions\b', re.I)
@@ -220,6 +221,64 @@ EVERCLIF_CSS = """
     border-radius: 10px;
     display: block;
     margin: 8px 0 24px;
+}
+
+.ec-blog-post .blog-content ul,
+.ec-blog-post .blog-content ol {
+    margin: 0 0 24px;
+    padding-left: 22px;
+}
+
+.ec-blog-post .blog-content li {
+    margin-bottom: 12px;
+}
+
+.ec-blog-post .blog-content li:last-child {
+    margin-bottom: 0;
+}
+
+.ec-blog-post .blog-content li > ul,
+.ec-blog-post .blog-content li > ol {
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+
+.ec-blog-post .blog-content .table-wrap {
+    overflow-x: auto;
+    margin: 8px 0 28px;
+    border: 1px solid rgba(30, 144, 255, 0.18);
+    border-radius: 12px;
+}
+
+.ec-blog-post .blog-content table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15.5px;
+}
+
+.ec-blog-post .blog-content th,
+.ec-blog-post .blog-content td {
+    padding: 14px 18px;
+    text-align: left;
+    border-bottom: 1px solid rgba(30, 144, 255, 0.14);
+}
+
+.ec-blog-post .blog-content thead th {
+    background: var(--primary);
+    color: var(--white);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ec-blog-post .blog-content tbody tr:nth-child(even) {
+    background: var(--light);
+}
+
+.ec-blog-post .blog-content tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .ec-blog-post .blog-closing-line {
@@ -587,9 +646,20 @@ def _extract_faq(root):
 
 
 def _build_toc(root):
+    """Build the TOC from top-level h2/h3 headings only (`recursive=False`).
+
+    Restricting to direct children of `root` -- rather than all h2/h3 anywhere
+    in the content -- is what keeps this safe: a real subsection heading (e.g.
+    a "How Pricing Works" h3 inside a listicle, sitting alongside its sibling
+    h2s) gets picked up, while a decorative h3 used as a title inside a nested
+    callout/stat-box/comparison-table caption does not, since it isn't a direct
+    child. An earlier version limited this to h2 only, which was blunter than
+    necessary and dropped legitimate h3 sub-items from listicle/comparison
+    posts -- this recovers those without reintroducing the noise.
+    """
     used_ids = set(filter(None, (t.get('id') for t in root.find_all(True))))
     toc_items = []
-    for heading in root.find_all(['h2']):
+    for heading in root.find_all(['h2', 'h3'], recursive=False):
         text = heading.get_text(strip=True)
         if not text:
             continue
@@ -600,19 +670,21 @@ def _build_toc(root):
 
 
 def _extract_cta(root):
-    """Pull an existing CTA banner's text/link/image out of the source, if present,
-    and remove it so we don't end up with two (the source one plus our injected one)."""
+    """Pull an existing CTA banner's text/link/image/button-label out of the source,
+    if present, and remove it so we don't end up with two (the source one plus our
+    injected one)."""
     tag = root.find(class_=lambda c: c and 'cta-banner' in c.lower())
     if not tag:
-        return None, None, None
+        return None, None, None, None
     text_el = tag.find(class_=lambda c: c and 'cta-text' in c.lower())
     text = text_el.get_text(strip=True) if text_el else None
-    link_el = tag.find('a', href=True)
-    link = link_el['href'].strip() if link_el else None
+    link_el = tag.find(class_=lambda c: c and 'cta-btn' in c.lower()) or tag.find('a', href=True)
+    link = link_el['href'].strip() if link_el and link_el.get('href') else None
+    button_text = link_el.get_text(strip=True) if link_el else None
     img_el = tag.find('img', src=True)
     image = img_el['src'].strip() if img_el else None
     tag.extract()
-    return text, link, image
+    return text, link, image, button_text
 
 
 def _format_today():
@@ -620,7 +692,38 @@ def _format_today():
     return f"{d.day} {d.strftime('%B')} {d.year}"
 
 
-def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None, cta_link=None, cta_image=None, feature_image=None):
+def _split_for_cta(root):
+    """Split root's content into two halves so the CTA banner can be inserted
+    ~35% of the way down the article.
+
+    The split point is snapped to fall immediately before a top-level h2 --
+    i.e. a real section boundary -- rather than at a raw tag-count fraction.
+    A raw fraction can land mid-section: between a lead-in paragraph and the
+    list/table it introduces, or inside a listicle's <ol> or a comparison
+    <table>, breaking the content apart. Restricting candidates to h2
+    boundaries (and excluding the very first one, so the CTA never sits above
+    the intro) guarantees the banner only ever lands between whole sections.
+    If the article has no such boundary (e.g. a single-section post), the CTA
+    is appended at the end instead of guessing a mid-content split.
+    """
+    children = list(root.contents)
+    tag_indices = [i for i, c in enumerate(children) if isinstance(c, Tag)]
+    h2_indices = [i for i in tag_indices if children[i].name == 'h2']
+    candidates = h2_indices[1:]
+
+    if not candidates:
+        split_idx = len(children)
+    else:
+        target_pos = round(len(tag_indices) * 0.35)
+        target_idx = tag_indices[min(target_pos, len(tag_indices) - 1)]
+        split_idx = min(candidates, key=lambda i: abs(i - target_idx))
+
+    content_part_1 = ''.join(str(c) for c in children[:split_idx])
+    content_part_2 = ''.join(str(c) for c in children[split_idx:])
+    return content_part_1, content_part_2
+
+
+def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None, cta_link=None, cta_image=None, cta_button_text=None, feature_image=None):
     soup = BeautifulSoup(source_html, 'html.parser')
 
     for tag in soup.find_all(['style', 'script']):
@@ -656,27 +759,27 @@ def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None
     # A source file may already contain a CTA banner (e.g. it was exported from
     # this same template before); reuse its content and remove it from the body
     # so we don't inject a second, generic one on top of it.
-    detected_cta_text, detected_cta_link, detected_cta_image = _extract_cta(root)
+    detected_cta_text, detected_cta_link, detected_cta_image, detected_cta_button = _extract_cta(root)
     cta_text = (cta_text or detected_cta_text or DEFAULT_CTA_TEXT).strip()
     cta_link = (cta_link or detected_cta_link or DEFAULT_CTA_LINK).strip()
     cta_image = (cta_image or detected_cta_image or DEFAULT_CTA_IMAGE).strip()
+    cta_button_text = (cta_button_text or detected_cta_button or DEFAULT_CTA_BUTTON_TEXT).strip()
     faq_pairs = _extract_prebuilt_faq(soup) or _extract_faq(root)
     toc_items = _build_toc(root)
     if faq_pairs:
         toc_items.append(('faq', 'FAQ', '2'))
 
+    # Wrap every comparison table in a scrollable container so wide tables
+    # (e.g. a "10 agencies compared" table) don't overflow the 720px content
+    # column on mobile, and so they pick up the .table-wrap card styling.
+    for table in root.find_all('table'):
+        wrapper = soup.new_tag('div', attrs={'class': 'table-wrap'})
+        table.wrap(wrapper)
+
     word_count = len(root.get_text(' ', strip=True).split())
     read_minutes = max(1, round(word_count / WORDS_PER_MINUTE))
 
-    children = list(root.contents)
-    tag_indices = [i for i, c in enumerate(children) if isinstance(c, Tag)]
-    if tag_indices:
-        split_pos = min(max(1, round(len(tag_indices) * 0.35)), len(tag_indices) - 1)
-        split_idx = tag_indices[split_pos] if len(tag_indices) > 1 else len(children)
-    else:
-        split_idx = len(children)
-    content_part_1 = ''.join(str(c) for c in children[:split_idx])
-    content_part_2 = ''.join(str(c) for c in children[split_idx:])
+    content_part_1, content_part_2 = _split_for_cta(root)
 
     toc_html = '\n'.join(
         f'<li><a href="#{id_}" class="toc-link{" toc-link--sub" if level == "3" else ""}" '
@@ -758,7 +861,7 @@ def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None
                     <img src="{html.escape(cta_image, quote=True)}" alt="{html.escape(author)}" class="blog-cta-img" width="120" height="120">
                     <div class="blog-cta-body">
                         <p class="blog-cta-text">{html.escape(cta_text)}</p>
-                        <a href="{html.escape(cta_link, quote=True)}" class="blog-cta-btn" target="_blank" rel="noopener noreferrer">Talk to Us</a>
+                        <a href="{html.escape(cta_link, quote=True)}" class="blog-cta-btn" target="_blank" rel="noopener noreferrer">{html.escape(cta_button_text)}</a>
                     </div>
                 </aside>
                 {content_part_2}
@@ -786,6 +889,7 @@ def index(request):
     cta_text = request.POST.get('cta_text', '').strip()
     cta_link = request.POST.get('cta_link', '').strip()
     cta_image = request.POST.get('cta_image', '').strip()
+    cta_button_text = request.POST.get('cta_button_text', '').strip()
     feature_image = request.POST.get('feature_image', '').strip()
 
     source_html = html_file.read().decode('utf-8', errors='replace')
@@ -798,6 +902,7 @@ def index(request):
             cta_text=cta_text or None,
             cta_link=cta_link or None,
             cta_image=cta_image or None,
+            cta_button_text=cta_button_text or None,
             feature_image=feature_image or None,
         )
     except Exception as exc:
