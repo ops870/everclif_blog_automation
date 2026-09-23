@@ -42,6 +42,19 @@ EVERCLIF_CSS = """
     font-variation-settings: 'wght' 400;
 }
 
+/* Satoshi is a variable font, and font-variation-settings is inherited --
+   the base 'wght' 400 above silently overrides `font-weight` on any bold
+   descendant that doesn't also set its own 'wght' (a well-known variable-font
+   gotcha). strong/b need a blanket rule here since they can appear anywhere
+   -- listicle lead-ins, table cells, FAQ answers -- not just in a few fixed
+   selectors. Every other bold selector in this file sets its matching
+   font-variation-settings alongside font-weight for the same reason. */
+.ec-blog-post strong,
+.ec-blog-post b {
+    font-weight: 700;
+    font-variation-settings: 'wght' 700;
+}
+
 .ec-blog-post .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -84,6 +97,7 @@ EVERCLIF_CSS = """
     display: inline-block;
     font-size: 13px;
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--white);
@@ -131,6 +145,7 @@ EVERCLIF_CSS = """
 .ec-blog-post .blog-toc-label {
     font-size: 12px;
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     letter-spacing: 0.6px;
     text-transform: uppercase;
     color: var(--accent);
@@ -167,6 +182,7 @@ EVERCLIF_CSS = """
 .ec-blog-post .toc-link.is-active {
     color: var(--primary);
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     border-left-color: var(--amber);
 }
 
@@ -206,6 +222,7 @@ EVERCLIF_CSS = """
 .ec-blog-post .blog-content h4 {
     font-size: 18px;
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     color: var(--accent);
     margin: 28px 0 10px;
 }
@@ -267,6 +284,7 @@ EVERCLIF_CSS = """
     background: var(--primary);
     color: var(--white);
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     font-size: 13px;
     letter-spacing: 0.3px;
     text-transform: uppercase;
@@ -284,6 +302,7 @@ EVERCLIF_CSS = """
 .ec-blog-post .blog-closing-line {
     font-size: 19px;
     font-weight: 600;
+    font-variation-settings: 'wght' 600;
     font-style: italic;
     color: var(--primary);
 }
@@ -324,6 +343,7 @@ EVERCLIF_CSS = """
     padding: 11px 26px;
     font-size: 16px;
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     color: var(--primary);
     background: linear-gradient(135deg, #FBBF45 0%, var(--amber) 100%);
     border: 2px solid var(--amber);
@@ -389,6 +409,7 @@ EVERCLIF_CSS = """
     padding: 20px 24px;
     font-size: 16px;
     font-weight: 600;
+    font-variation-settings: 'wght' 600;
     color: var(--primary);
     font-family: inherit;
 }
@@ -405,6 +426,7 @@ EVERCLIF_CSS = """
     color: var(--amber-dark);
     font-size: 18px;
     font-weight: 700;
+    font-variation-settings: 'wght' 700;
     transition: transform 0.25s ease;
 }
 
