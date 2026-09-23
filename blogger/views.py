@@ -260,6 +260,20 @@ EVERCLIF_CSS = """
     margin-bottom: 0;
 }
 
+.ec-blog-post .blog-content li > p {
+    margin: 0 0 12px;
+}
+
+.ec-blog-post .blog-content li > p:last-child {
+    margin-bottom: 0;
+}
+
+.ec-blog-post .blog-content .listicle-lead {
+    font-size: 18px;
+    color: var(--primary);
+    margin: 0 0 10px;
+}
+
 .ec-blog-post .blog-content .table-wrap {
     overflow-x: auto;
     margin: 8px 0 28px;
@@ -714,6 +728,50 @@ def _format_today():
     return f"{d.day} {d.strftime('%B')} {d.year}"
 
 
+def _split_listicle_items(root, soup):
+    """Give each ranked listicle item ("<li><strong>Agency -- Best for X.</strong>
+    description...</li>") a seam to manually drop an image into between its
+    bold lead-in and the rest of the write-up.
+
+    As authored, the lead-in and the body run together inline in the same
+    <li> with nothing between them. This splits the leading <strong> into its
+    own <p class="listicle-lead"> and leaves an HTML comment placeholder
+    right after it, so an <img> can be pasted in per item without having to
+    restructure the markup by hand each time. Only <ol> items are touched --
+    plain <ul> bullets (criteria lists, "how to choose" tips, etc.) don't
+    carry one image per item and are left inline as-is.
+    """
+    for ol in root.find_all('ol'):
+        for li in ol.find_all('li', recursive=False):
+            contents = list(li.contents)
+            idx = 0
+            while idx < len(contents) and isinstance(contents[idx], str) and not contents[idx].strip():
+                idx += 1
+            if idx >= len(contents) or not (isinstance(contents[idx], Tag) and contents[idx].name == 'strong'):
+                continue
+            lead = contents[idx]
+            rest = contents[idx + 1:]
+            if not any(isinstance(c, Tag) or (isinstance(c, str) and c.strip()) for c in rest):
+                continue
+
+            lead.extract()
+            body_p = soup.new_tag('p')
+            for i, c in enumerate(rest):
+                c = c.extract()
+                if i == 0 and isinstance(c, str):
+                    c = c.lstrip()
+                    if not c:
+                        continue
+                body_p.append(c)
+
+            li.clear()
+            lead_p = soup.new_tag('p', attrs={'class': 'listicle-lead'})
+            lead_p.append(lead)
+            li.append(lead_p)
+            li.append(Comment(" TODO: add this item's image here, e.g. <img src=\"...\" alt=\"...\"> "))
+            li.append(body_p)
+
+
 def _split_for_cta(root):
     """Split root's content into two halves so the CTA banner can be inserted
     ~35% of the way down the article.
@@ -797,6 +855,8 @@ def build_everclif_post(source_html, *, eyebrow=None, author=None, cta_text=None
     for table in root.find_all('table'):
         wrapper = soup.new_tag('div', attrs={'class': 'table-wrap'})
         table.wrap(wrapper)
+
+    _split_listicle_items(root, soup)
 
     word_count = len(root.get_text(' ', strip=True).split())
     read_minutes = max(1, round(word_count / WORDS_PER_MINUTE))
